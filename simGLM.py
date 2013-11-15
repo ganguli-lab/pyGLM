@@ -97,10 +97,9 @@ def f_df(theta, data, params):
     # gradient for history terms
     grad['h'] = np.zeros((params['dh']+1,1))
     for t in np.arange(1,params['dh']+1):
-        grad['h'][-t-1] = rateDiff.dot(newData['rfull'][params['dh']-t:-t]) / M
+        grad['h'][-t-1] = params['dt']*rateDiff.dot(newData['rfull'][params['dh']-t:-t]) / M
 
     return fval, grad
-
 
 
 def simulate(theta, params, x = 'none', y = 'none'):
