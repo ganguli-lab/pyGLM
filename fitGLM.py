@@ -45,8 +45,6 @@ if __name__=="__main__":
     print('Drawing spike counts...')
     data['spkCount'] = genSpikes(data['r']*p['dt'])
 
-    print('Run optimizers...')
-    self.optimizer = SFO(self.f_df_wrapper, self.model.theta_init, self.model.subfunction_references)
-    x = self.optimizer.optimize(num_passes=num_passes)
-
-
+    #print('Run optimizers...')
+    #self.optimizer = SFO(self.f_df_wrapper, self.model.theta_init, self.model.subfunction_references)
+    #x = self.optimizer.optimize(num_passes=num_passes)

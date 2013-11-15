@@ -44,7 +44,11 @@ def generateModel(params):
     # stimulus filters for each of n neurons
     theta['w'] = 0.2*np.random.randn(params['ds'], params['n'])
 
-    # history (coupling) filters - stored as a big n by (n x dh) matrix
+    # history (self-coupling) filters for each of n neurons
+    theta['h'] = sort(0.1*np.rand(params['dh']+1, params['n']),0)
+    theta['h'][-1] = 0                                              # current term is zero
+
+    # coupling filters - stored as a big n by (n x dh) matrix
     #theta['h'] = np.zeros((params['dh']*params['n'], params['n']))
 
     #for idx in range(0,params['n']):
@@ -71,7 +75,7 @@ def simulate(theta, params, x = 'none', y = 'none'):
 
     # get stimulus
     if x == 'none':
-        data['x'] = 0.2*np.random.randn(params['ds'], params['m']).T
+        data['x'] = 0.2*np.random.randn(params['ds'], params['m']+params['dh']).T
     else:
         data['x'] = x
 
@@ -80,14 +84,17 @@ def simulate(theta, params, x = 'none', y = 'none'):
         #y = np.random.randn(params['n']*params['dh'], params['m'])
 
     # compute stimulus response for the n neurons
-    stimResp = theta['w'].T.dot(data['x'].T)
+    uw = theta['w'].T.dot(data['x'].T)
+    stimResp = exp(uw)
+
+    # compute history terms
+    uh = convolve(squeeze(stimResp), squeeze(flipud(theta['h'])), 'valid')
 
     # compute coupling
     #coupResp = theta['h'].T.dot(y)
 
     # response of the n neurons (stored as an n by m matrix)
-    #r = np.exp(stimResp + coupResp)
-    data['r'] = np.exp(stimResp).T
+    data['r'] = np.exp(uw+uh).T
 
     return data
 
