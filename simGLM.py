@@ -119,6 +119,9 @@ def simulate(theta, params, x = 'none', y = 'none'):
     else:
         data['x'] = x
 
+    # data size
+    m = data['x'].shape[0]
+
     # get coupling terms
     #if y == 'none':
         #y = np.random.randn(params['n']*params['dh'], params['m'])
@@ -134,10 +137,10 @@ def simulate(theta, params, x = 'none', y = 'none'):
     #coupResp = theta['h'].T.dot(y)
 
     # response of the n neurons (stored as an n by m matrix)
-    data['r'] = np.reshape( np.exp(uw[0,params['dh']:]+uh), (params['m'],1) )
+    data['r'] = np.reshape( np.exp(uw[0,params['dh']:]+uh), (m,1) )
 
     # full response (including history buffer)
-    uh_padded = np.vstack( (np.zeros((params['dh'],1)), np.reshape(uh,(params['m'],1)) ))
+    uh_padded = np.vstack( (np.zeros((params['dh'],1)), np.reshape(uh,(m,1)) ))
     data['rfull'] = np.exp( uw.T + uh_padded )
 
     return data
