@@ -7,7 +7,7 @@ author: Niru Maheswaranathan
 4:31 PM Nov 13, 2013
 """
 
-def setParameters(n = 10, ds = 500, dh = 20, m = 1000, dt = 0.1):
+def setParameters(n = 1, ds = 500, dh = 20, m = 50000, dt = 0.1):
 
     """
 
@@ -71,21 +71,23 @@ def simulate(theta, params, x = 'none', y = 'none'):
 
     # get stimulus
     if x == 'none':
-        data['x'] = 0.2*np.random.randn(params['ds'], params['m'])
+        data['x'] = 0.2*np.random.randn(params['ds'], params['m']).T
+    else:
+        data['x'] = x
 
     # get coupling terms
     #if y == 'none':
         #y = np.random.randn(params['n']*params['dh'], params['m'])
 
     # compute stimulus response for the n neurons
-    stimResp = theta['w'].T.dot(data['x'])
+    stimResp = theta['w'].T.dot(data['x'].T)
 
     # compute coupling
     #coupResp = theta['h'].T.dot(y)
 
     # response of the n neurons (stored as an n by m matrix)
     #r = np.exp(stimResp + coupResp)
-    data['r'] = np.exp(stimResp)
+    data['r'] = np.exp(stimResp).T
 
     return data
 

@@ -1,5 +1,6 @@
 import numpy as np
 import simGLM as glm
+from sfo.sfo import SFO
 
 """
 GLM maximum likelihood objectives
@@ -25,9 +26,10 @@ def objPoissonGLM(theta, params, data):
     fval = data['spkCount'].dot((rdt - np.log(rdt + epsilon)).T)
 
     # compute gradient
-    grad = (rdt - data['spkCount']).dot(data['x'].T)
+    grad = dict()
+    grad['w'] = (rdt - data['spkCount']).dot(data['x'].T).T
 
-    return (fval, grad)
+    return fval, grad
 
 if __name__=="__main__":
 
@@ -42,3 +44,9 @@ if __name__=="__main__":
 
     print('Drawing spike counts...')
     data['spkCount'] = genSpikes(data['r']*p['dt'])
+
+    print('Run optimizers...')
+    self.optimizer = SFO(self.f_df_wrapper, self.model.theta_init, self.model.subfunction_references)
+    x = self.optimizer.optimize(num_passes=num_passes)
+
+
