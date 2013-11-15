@@ -13,10 +13,10 @@ if __name__=="__main__":
     p = glm.setParameters()
 
     print('Generating model...')
-    theta = generateModel(p)
+    theta = glm.generateModel(p)
 
     print('Simulating model...')
-    data = simulate(theta, p)
+    data = glm.simulate(theta, p)
 
     print('Drawing spike counts...')
     data['spkCount'] = genSpikes(data['r']*p['dt'])
