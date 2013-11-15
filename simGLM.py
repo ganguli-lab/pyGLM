@@ -137,7 +137,7 @@ def simulate(theta, params, x = 'none', y = 'none'):
 
     # compute stimulus response for the n neurons
     uw = theta['w'].T.dot(data['x'].T).T            # (uw is: m by 1)
-    data['stimResp'] = np.squeeze( np.exp(uw) )
+    stimResp = np.squeeze( np.exp(uw) )
     #stimResp = np.exp(uw)
 
     # compute history terms                           (uh is: m by 1)
