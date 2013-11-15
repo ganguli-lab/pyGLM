@@ -120,7 +120,7 @@ def simulate(theta, params, x = 'none', y = 'none'):
         data['x'] = x
 
     # data size
-    m = data['x'].shape[0]
+    m = data['x'].shape[0] - params['dh']
 
     # get coupling terms
     #if y == 'none':
