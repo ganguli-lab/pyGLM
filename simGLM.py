@@ -62,6 +62,35 @@ def generateModel(params):
     return theta
 
 
+def f_df(theta, data, params):
+    """
+    objective assuming Poisson noise
+
+    function [fval grad] = objPoissonGLM(theta, datapath)
+    % Computes the Poisson log-likelihood objective and gradient
+    % for the generalized linear model (GLM)
+    """
+
+    # fudge factor for numerical stability
+    epsilon = 0
+
+    M = data['x'].shape[0]
+
+    # simulate the model at theta
+    newData = simulate(theta, params, data['x'])
+    rdt = newData['r']*params['dt']
+
+    # compute objective value (negative log-likelihood)
+    fval = sum(rdt - data['spkCount']*np.log(rdt + epsilon)) / M
+
+    # compute gradient
+    grad = dict()
+    grad['w'] = (rdt - data['spkCount']).T.dot(data['x']).T / M
+
+    return fval, grad
+
+
+
 def simulate(theta, params, x = 'none', y = 'none'):
 
     """
