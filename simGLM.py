@@ -49,10 +49,10 @@ def f_df(theta, data, params):
     rateDiffArray = np.squeeze(rateDiff)
 
     #grad['h'] = np.zeros( (m,1) )
-    for j in np.arange(0,grad['h'].shape[0]):
-        delta = j + 1
-        grad['h'][j] = sum( spkCountArray[:-delta] * rateDiffArray[delta:] ) / m
-        #grad['h'][j] = np.mean( spkCountArray[:-delta] * rateDiffArray[delta:] )
+    dh = params['dh']
+    for delta in np.arange(1,dh+1):
+        grad['h'][dh-delta] = sum( spkCountArray[:-delta] * rateDiffArray[delta:] ) / m
+        #grad['h'][dh-delta] = np.mean( spkCountArray[:-delta] * rateDiffArray[delta:] )
 
     #Cr = np.correlate( np.squeeze(rateDiff), np.squeeze(data['n']), 'full' )
     #grad['h'] = np.reshape( Cr[rateDiff.size-params['dh']-1:rateDiff.size-1], (params['dh'], 1) ) / m
