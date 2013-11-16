@@ -20,34 +20,50 @@ def f_df(theta, data, params):
     epsilon = 0
 
     # number of data samples in this batch
-    M = data['x'].shape[0]
+    m = data['x'].shape[0]
 
     ## simulate the model at theta
-    newData = simulate(theta, params, data['x'])
-    rdt = newData['r']*params['dt']                 # rdt is: m by 1
+    rhat = simulate(theta, params, data)
+    rdt  = rhat*params['dt']                        # rdt is: m by 1
 
     ## compute objective value (negative log-likelihood)
-    fval = sum(rdt - data['spkCount']*np.log(rdt + epsilon)) / M
+    fval = sum(rdt - data['n']*np.log(rdt + epsilon)) / m
 
     ## compute gradient
     grad = dict()
 
     # temporarily store different in rate vs. observed spike count (used for gradient computations)
-    rateDiff = (rdt - data['spkCount']).T           # rateDiff is: 1 by m
+    rateDiff = (rdt - data['n']).T                  # rateDiff is: 1 by m
 
     # gradient for stimulus parameters
-    grad['w'] = rateDiff.dot(data['x']).T / M       # grad['w'] is: ds by 1
+    grad['w'] = rateDiff.dot(data['x']).T / m       # grad['w'] is: ds by 1
+
+    # gradient for the offset term
+    grad['b'] = sum(np.squeeze(rateDiff)) / m       # grad['b'] is a scalar
 
     # gradient for history terms
-    grad['h'] = np.zeros((params['dh']+1,1))
+    grad['h'] = np.zeros((params['dh'],1))          # grad['h'] is: dh by 1
 
     # cross-correlate rate vector
-    Cr = np.correlate(newData['stimResp'], np.squeeze(rateDiff), 'full')[params['dh']:rateDiff.size-1]
-    grad['h'][:-1] = np.reshape( Cr[-params['dh']:] / M, (params['dh'],1) )
+    spkCountArray = np.squeeze(data['n'])
+    rateDiffArray = np.squeeze(rateDiff)
+
+    #grad['h'] = np.zeros( (m,1) )
+    for j in np.arange(0,grad['h'].shape[0]):
+        delta = j + 1
+        grad['h'][j] = sum( spkCountArray[:-delta] * rateDiffArray[delta:] ) / m
+        #grad['h'][j] = np.mean( spkCountArray[:-delta] * rateDiffArray[delta:] )
+
+    #Cr = np.correlate( np.squeeze(rateDiff), np.squeeze(data['n']), 'full' )
+    #grad['h'] = np.reshape( Cr[rateDiff.size-params['dh']-1:rateDiff.size-1], (params['dh'], 1) ) / m
+
+    #np.correlate( np.squeeze(rateDiff), 'full' )[:m]
+    #Cr = np.correlate(newData['stimResp'], np.squeeze(rateDiff), 'full')[params['dh']:rateDiff.size-1]
+    #grad['h'][:-1] = np.reshape( Cr[-params['dh']:] / m, (params['dh'],1) )
     #Cr = np.correlate(newData['rfull'],newData['rfull'],'full')[params['dh']:newData['rfull'].size-1]
-    #grad['h'][:-1] = np.reshape( Cr[-params['dh']:] / M, (params['dh'],1) )
+    #grad['h'][:-1] = np.reshape( Cr[-params['dh']:] / m, (params['dh'],1) )
     #for t in np.arange(1,params['dh']+1):
-        #grad['h'][-t-1] = params['dt']*rateDiff.dot(newData['rfull'][params['dh']-t:-t]) / M
+        #grad['h'][-t-1] = params['dt']*rateDiff.dot(newData['rfull'][params['dh']-t:-t]) / m
 
     return fval, grad
 
@@ -79,6 +95,7 @@ def generateModel(params):
 
     Returns a theta dictionary:
     theta['w']:    stimulus filters for the n neurons, (ds x n) matrix
+    theta['b']:    stimulus offset  for the n neurons, (ds x n) matrix
     theta['h']:    history  filters for the n neurons, (dh x n) matrix
 
     """
@@ -90,9 +107,12 @@ def generateModel(params):
     # stimulus filters for each of n neurons
     theta['w'] = 0.2*np.random.randn(params['ds'], params['n'])
 
+    # offset (scalar)
+    theta['b'] = -1*np.ones((1,params['n']))
+
     # history (self-coupling) filters for each of n neurons
-    theta['h'] = np.sort(0.1*np.random.rand(params['dh']+1, params['n']),0)
-    theta['h'][-1] = 0                                              # last term must be zero
+    #theta['h'] = -np.sort(0.1*np.random.rand(params['dh'], params['n']),0)
+    theta['h'] = -0.1*np.ones((params['dh'], params['n']))
 
     # coupling filters - stored as a big n by (n x dh) matrix
     #theta['h'] = np.zeros((params['dh']*params['n'], params['n']))
@@ -107,60 +127,81 @@ def generateModel(params):
 
     return theta
 
-
-def simulate(theta, params, x = 'none', y = 'none'):
+def generateData(theta, params):
 
     """
-
-    Simulates the output of the GLM
-    -------------------------------
+    Generates stimuli and draws spike counts from the model
+    -------------------------------------------------------
     """
 
-    ## store output in dictionary
+    ## store output in a dictionary
     data = {}
 
-    # get stimulus (x is: m+dh by ds)
-    if x == 'none':
-        data['x'] = 0.2*np.random.randn(params['ds'], params['m']).T
-    else:
-        data['x'] = x
+    # length of simulation
+    m = params['m']
 
-    # data size
-    m = data['x'].shape[0] #- params['dh']
+    # input / output
+    data['x'] = 0.2*np.random.randn(m, params['ds']) # stimulus
+    data['n'] = np.zeros( (m, 1) )                   # spike history
 
-    if m < params['dh']:
-        print('error: minibatch size is too small (smaller than history term)')
+    # compute stimulus projection
+    u = theta['w'].T.dot(data['x'].T).T            # (u is: m by 1)
 
-    # get coupling terms
-    #if y == 'none':
-        #y = np.random.randn(params['n']*params['dh'], params['m'])
+    # the initial rate (no history)
+    data['n'][0] = poisson.rvs( np.exp( u[0] + theta['b'] ) )
 
-    # compute stimulus response for the n neurons
-    uw = theta['w'].T.dot(data['x'].T).T            # (uw is: m by 1)
-    stimResp = np.squeeze( np.exp(uw) )
-    #stimResp = np.exp(uw)
+    # the next rate (one history point)
+    data['n'][1] = poisson.rvs( np.exp( u[1] + data['n'][0]*theta['h'][-1] + theta['b'] ) )
 
-    # compute history terms                           (uh is: m by 1)
-    uh_full = np.correlate(data['stimResp'], np.squeeze(theta['h']), 'full')
-    uh = np.reshape(uh_full[:m],(m,1))
+    # simulate the model (in time)
+    for j in np.arange(2,m):
 
-    # compute coupling
-    #coupResp = theta['h'].T.dot(y)
+        # compute history weights
+        if j < params['dh']+1:
+            n1 = np.squeeze(data['n'][0:j])
+            n2 = np.squeeze(theta['h'])
+            v = np.correlate( n1 , n2 , 'valid' )[0]
+        else:
+            #print(theta['h'].shape)
+            #print(data['n'][j-params['dh']:j].T.shape)
+            v = data['n'][j-params['dh']:j].T.dot(theta['h'])
 
-    # response of the n neurons (stored as an n by m matrix)
-    data['r'] = np.reshape( np.exp(uw+uh), (m,1) )
+        # compute model firing rate
+        r = np.exp( u[j] + v + theta['b'] )
 
-    # full response (including history buffer)
-    #uw_full = np.vstack( (np.zeros((params['dh'],1)), uw ))
-    #data['rfull'] = np.exp(np.squeeze(uw_full))# + uh_full)
+        # draw spikes
+        data['n'][j] = poisson.rvs(r)
 
     return data
 
-def genSpikes(rate):
 
-    # draw samples from poisson distribution
-    return poisson.rvs(rate)
+def simulate(theta, params, data):
 
+    """
+    Simulates the output of the GLM given true stimulus/response
+    ------------------------------------------------------------
+    """
+
+    # get stimuli, offset, and spike counts
+    x = data['x']           # (x is: m by ds)
+    n = data['n']           # spike counts
+
+    # number of samples
+    m = data['x'].shape[0]
+
+    # make sure we have a reasonable number of samples
+    if m < params['dh']:
+        print('error: minibatch size is too small (smaller than history term)')
+
+    # compute stimulus projection for the n neurons     # (u is: m by 1)
+    u = theta['w'].T.dot(data['x'].T).T
+
+    # compute history terms                             # (uh is: m by 1)
+    v = np.reshape( np.correlate(np.squeeze(n), np.squeeze(theta['h']), 'full')[0:n.size-1], (m-1,1) )
+    v = np.vstack(( np.zeros((1,1)) , v ))
+
+    # response of the n neurons (stored as an n by m matrix)
+    return np.exp( u + v + theta['b'] )
 
 if __name__=="__main__":
 
@@ -171,10 +212,7 @@ if __name__=="__main__":
     theta = generateModel(p)
 
     print('Simulating model...')
-    data = simulate(theta, p)
-
-    print('Drawing spike counts...')
-    data['spkCount'] = genSpikes(data['r']*p['dt'])
+    data = generateData(theta, p)
 
     print('Evaluating objective...')
     fval, grad = f_df(theta, data, p)
