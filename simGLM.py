@@ -117,7 +117,8 @@ def generateModel(params, filterType='sinusoid'):
         theta['w'] = 0.2*np.random.randn(params['ds'], params['n'])
 
     # normalize filters
-    theta['w'] = theta['w'] / np.linalg.norm( theta['w'], axis=0 )
+    #theta['w'] = theta['w'] / np.linalg.norm( theta['w'], axis=0 )
+    theta['w'] = theta['w'] / np.sqrt(np.sum(theta['w']**2, axis=0))
 
     # offset (scalar)
     theta['b'] = -1*np.ones((1,params['n']))
