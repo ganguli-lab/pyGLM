@@ -47,6 +47,10 @@ def f_df(theta, data, params):
     # gradient for history terms
     grad['h'] = np.zeros((dh,N))                    # grad['h'] is: dh by N
 
+    # gradient for coupling terms
+    nprev = np.vstack(( np.zeros((1,N)), data['n'][1:,:] )) # (nprev is: M by N)
+    grad['k'] = rateDiff.dot(nprev).T / M           # grad['k'] is:  N by N
+
     # for each neuron
     for nrnIdx in range(N):
 
@@ -89,6 +93,7 @@ def generateModel(params, filterType='sinusoid'):
     theta['w']:    stimulus filters for the n neurons, (ds x N) matrix
     theta['b']:    stimulus offset  for the n neurons, ( 1 x N) matrix
     theta['h']:    history  filters for the n neurons, (dh x N) matrix
+    theta['k']:    coupling filters for the n neurons, ( N x N) matrix
 
     """
 
@@ -124,15 +129,8 @@ def generateModel(params, filterType='sinusoid'):
     theta['h'] = -0.1*np.sort( np.random.rand( dh, N ), axis=0 )
 
     # coupling filters - stored as a (n by n) matrix
-    #theta['k'] = np.zeros( (N, N) )
-
-    #for idx in range(0,params['n']):
-
-        ## generate coupling terms with other neurons
-        #theta['h'][:,idx] = np.random.randn(params['dh']*params['n'])
-
-        ## zero out self-coupling
-        #theta['h'][np.arange(idx*params['dh'],(idx+1)*params['dh']),idx] = 0
+    theta['k'] = np.random.rand(N, N)
+    theta['k'] = (theta['k'] - theta['k'].T)/2
 
     return theta
 
@@ -155,6 +153,7 @@ def generateData(theta, params):
     w = theta['w']
     b = theta['b']
     h = theta['h']
+    k = theta['k']
 
     # offset for numerical stability
     epsilon = 1e-20
@@ -196,7 +195,7 @@ def generateData(theta, params):
             v = sum(data['n'][j-dh:j,:]*(h))
 
         # compute model firing rate
-        r = np.exp( u[j,:] + v + b ) + epsilon
+        r = np.exp( u[j,:] + v + b + data['n'][j-1,:].dot(k) ) + epsilon
 
         # draw spikes
         data['n'][j,:] = poisson.rvs(r)
@@ -222,10 +221,11 @@ def simulate(theta, params, data):
     w = theta['w']
     b = theta['b']
     h = theta['h']
+    k = theta['k']
 
     # get stimuli, offset, and spike counts
-    x = data['x']           # (x is: m by ds)
-    n = data['n']           # spike counts
+    x = data['x']           # stimuli       (x is: M by ds)
+    n = data['n']           # spike counts  (n is: M by N)
 
     # make sure we have a reasonable number of samples
     if M < dh:
@@ -233,6 +233,9 @@ def simulate(theta, params, data):
 
     # compute stimulus projection for the n neurons     # (u is: M by N)
     u = w.T.dot(x.T).T
+
+    # compute coupling projection
+    kappa = np.vstack(( np.zeros((1,N)), n.dot(k)[1:,:] )) # (kappa is: M by N)
 
     # predicted rates
     rates = np.zeros( (M,N) )
@@ -243,7 +246,7 @@ def simulate(theta, params, data):
         v = np.vstack(( np.zeros((1,1)) , v ))
 
         # response of the n neurons (stored as an n by m matrix)
-        rates[:,nrnIdx] = np.exp( u[:,nrnIdx] + np.squeeze(v) + b[0,nrnIdx] )
+        rates[:,nrnIdx] = np.exp( u[:,nrnIdx] + np.squeeze(v) + b[0,nrnIdx] + kappa[:,nrnIdx])
 
     return rates
 
