@@ -54,25 +54,11 @@ def f_df(theta, data, params):
         grad['h'][dh-delta] = sum( spkCountArray[:-delta] * rateDiffArray[delta:] ) / m
         #grad['h'][dh-delta] = np.mean( spkCountArray[:-delta] * rateDiffArray[delta:] )
 
-    #Cr = np.correlate( np.squeeze(rateDiff), np.squeeze(data['n']), 'full' )
-    #grad['h'] = np.reshape( Cr[rateDiff.size-params['dh']-1:rateDiff.size-1], (params['dh'], 1) ) / m
-
-    #np.correlate( np.squeeze(rateDiff), 'full' )[:m]
-    #Cr = np.correlate(newData['stimResp'], np.squeeze(rateDiff), 'full')[params['dh']:rateDiff.size-1]
-    #grad['h'][:-1] = np.reshape( Cr[-params['dh']:] / m, (params['dh'],1) )
-    #Cr = np.correlate(newData['rfull'],newData['rfull'],'full')[params['dh']:newData['rfull'].size-1]
-    #grad['h'][:-1] = np.reshape( Cr[-params['dh']:] / m, (params['dh'],1) )
-    #for t in np.arange(1,params['dh']+1):
-        #grad['h'][-t-1] = params['dt']*rateDiff.dot(newData['rfull'][params['dh']-t:-t]) / m
-
     return fval, grad
 
-
-def setParameters(n = 1, ds = 500, dh = 10, m = 1000, dt = 0.1):
+def setParameters(n = 10, ds = 500, dh = 10, m = 1000, dt = 0.1):
 
     """
-    !! NOTE: Currently, n must be set to 1
-
     Parameters
     ----------
     n : number of neurons
@@ -83,7 +69,7 @@ def setParameters(n = 1, ds = 500, dh = 10, m = 1000, dt = 0.1):
     """
 
     # define the parameters dictionary
-    params = {'n': 1, 'ds': ds, 'dh': dh, 'm': m, 'dt': dt}
+    params = {'numNeurons': n, 'stim_dim': ds, 'hist_dim': dh, 'numSamples': m, 'dt': dt}
     return params
 
 def generateModel(params, filterType='sinusoid'):
@@ -100,6 +86,12 @@ def generateModel(params, filterType='sinusoid'):
 
     """
 
+    ## get out parameters
+    ds = params['stim_dim']
+    dh = params['hist_dim']
+    N  = params['numNeurons']
+    M  = params['numSamples']
+
     ## store model as dictionary
     theta = {}
 
@@ -107,25 +99,24 @@ def generateModel(params, filterType='sinusoid'):
 
     # stimulus filters for each of n neurons
     if filterType is 'random':
-        theta['w'] = np.random.randn(params['ds'], params['n'])
+        theta['w'] = np.random.randn(ds, N)
     elif filterType is 'sinusoid':
-        theta['w'] = np.zeros((params['ds'], params['n']))
-        for neuronIndex in range(params['n']):
-            theta['w'][:,neuronIndex] = np.sin( np.linspace(0,2*np.pi,params['ds']) + 2*np.pi*np.random.rand() )
+        theta['w'] = np.zeros((ds, N))
+        for neuronIndex in range(N):
+            theta['w'][:,neuronIndex] = np.sin( np.linspace(0,2*np.pi,ds) + 2*np.pi*np.random.rand() )
     else:
         print('WARNING: unrecognized filter type. Using random values instead.')
-        theta['w'] = 0.2*np.random.randn(params['ds'], params['n'])
+        theta['w'] = 0.2*np.random.randn(ds, N)
 
     # normalize filters
     #theta['w'] = theta['w'] / np.linalg.norm( theta['w'], axis=0 )
     theta['w'] = theta['w'] / np.sqrt(np.sum(theta['w']**2, axis=0))
 
     # offset (scalar)
-    theta['b'] = -1*np.ones((1,params['n']))
+    theta['b'] = -1*np.ones((1,N))
 
     # history (self-coupling) filters for each of n neurons
-    #theta['h'] = -np.sort(0.1*np.random.rand(params['dh'], params['n']),0)
-    theta['h'] = -0.1*np.ones((params['dh'], params['n']))
+    theta['h'] = -0.1*np.ones((dh, N))
 
     # coupling filters - stored as a big n by (n x dh) matrix
     #theta['h'] = np.zeros((params['dh']*params['n'], params['n']))
@@ -147,21 +138,24 @@ def generateData(theta, params):
     -------------------------------------------------------
     """
 
+    ## get out parameters
+    ds = params['stim_dim']
+    dh = params['hist_dim']
+    N  = params['numNeurons']
+    M  = params['numSamples']
+
     # offset for numerical stability
     epsilon = 1e-20
 
     ## store output in a dictionary
     data = {}
 
-    # length of simulation
-    m = params['m']
-
     # input / output
-    data['x'] = 0.2*np.random.randn(m, params['ds']) # stimulus
-    data['n'] = np.zeros( (m, 1) )                   # spike history
+    data['x'] = 0.2*np.random.randn(M, ds) # stimulus
+    data['n'] = np.zeros( (M, N) )                   # spike history
 
     # compute stimulus projection
-    u = theta['w'].T.dot(data['x'].T).T            # (u is: m by 1)
+    u = theta['w'].T.dot(data['x'].T).T            # (u is: M by 1)
 
     # the initial rate (no history)
     data['n'][0] = poisson.rvs( np.exp( u[0] + theta['b'] ) )
@@ -170,17 +164,15 @@ def generateData(theta, params):
     data['n'][1] = poisson.rvs( np.exp( u[1] + data['n'][0]*theta['h'][-1] + theta['b'] ) )
 
     # simulate the model (in time)
-    for j in np.arange(2,m):
+    for j in np.arange(2,M):
 
         # compute history weights
-        if j < params['dh']+1:
+        if j < dh+1:
             n1 = np.squeeze(data['n'][0:j])
             n2 = np.squeeze(theta['h'])
             v = np.correlate( n1 , n2 , 'valid' )[0]
         else:
-            #print(theta['h'].shape)
-            #print(data['n'][j-params['dh']:j].T.shape)
-            v = data['n'][j-params['dh']:j].T.dot(theta['h'])
+            v = data['n'][j-dh:j].T.dot(theta['h'])
 
         # compute model firing rate
         r = np.exp( u[j] + v + theta['b'] ) + epsilon
