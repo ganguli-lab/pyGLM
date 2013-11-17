@@ -30,7 +30,7 @@ def f_df(theta, data, params):
     rdt  = rhat*params['dt']                        # rdt is: M by N
 
     ## compute objective value (negative log-likelihood)
-    fval = sum(sum(rdt - data['n']*np.log(rdt + epsilon))) / (M*N)
+    fval = sum(sum(rdt - data['n']*np.log(rdt + epsilon))) / M
 
     ## compute gradient
     grad = dict()
@@ -51,8 +51,8 @@ def f_df(theta, data, params):
     for nrnIdx in range(N):
 
         # cross-correlate rate vector
-        spkCountArray = np.squeeze(data['n'][:,nrnIdx])     # M by 1
-        rateDiffArray = np.squeeze(rateDiff[nrnIdx,:])      # 1 by M
+        spkCountArray = np.squeeze(data['n'][:,nrnIdx])
+        rateDiffArray = np.squeeze(rateDiff[nrnIdx,:])
 
         # at each time offset
         for delta in np.arange(1,dh+1):
@@ -118,13 +118,13 @@ def generateModel(params, filterType='sinusoid'):
     theta['w'] = theta['w'] / np.linalg.norm( theta['w'], axis=0 )
 
     # offset (scalar)
-    theta['b'] = -1*np.ones((1,N))
+    theta['b'] = -1*np.ones((1,N)) + 0.1*np.random.randn(1,N)
 
     # history (self-coupling) filters for each of n neurons
-    theta['h'] = -0.1*np.ones((dh, N))
+    theta['h'] = -0.1*np.sort( np.random.rand( dh, N ), axis=0 )
 
-    # coupling filters - stored as a big n by (n x dh) matrix
-    #theta['h'] = np.zeros((params['dh']*params['n'], params['n']))
+    # coupling filters - stored as a (n by n) matrix
+    #theta['k'] = np.zeros( (N, N) )
 
     #for idx in range(0,params['n']):
 
@@ -144,10 +144,17 @@ def generateData(theta, params):
     """
 
     ## get out parameters
+
+    # constants
     ds = params['stim_dim']
     dh = params['hist_dim']
     N  = params['numNeurons']
     M  = params['numSamples']
+
+    # model parameters
+    w = theta['w']
+    b = theta['b']
+    h = theta['h']
 
     # offset for numerical stability
     epsilon = 1e-20
@@ -160,13 +167,13 @@ def generateData(theta, params):
     data['n'] = np.zeros( (M, N) )                   # spike history
 
     # compute stimulus projection
-    u = theta['w'].T.dot(data['x'].T).T            # (u is: M by N)
+    u = w.T.dot(data['x'].T).T            # (u is: M by N)
 
     # the initial rate (no history)
-    data['n'][0,:] = poisson.rvs( np.exp( u[0,:] + theta['b'] ) )
+    data['n'][0,:] = poisson.rvs( np.exp( u[0,:] + b ) )
 
     # the next rate (one history point)
-    data['n'][1,:] = poisson.rvs( np.exp( u[1,:] + data['n'][0,:]*theta['h'][-1,:] + theta['b'] ) )
+    data['n'][1,:] = poisson.rvs( np.exp( u[1,:] + data['n'][0,:]*h[-1,:] + b ) )
 
     # simulate the model (in time)
     for j in np.arange(2,M):
@@ -180,22 +187,21 @@ def generateData(theta, params):
             # for each neuron
             for nrnIdx in range(N):
                 n1 = np.squeeze(data['n'][0:j,nrnIdx])
-                n2 = np.squeeze(theta['h'][:,nrnIdx])
+                n2 = np.squeeze(h[:,nrnIdx])
                 v[0,nrnIdx] = np.correlate( n1 , n2 , 'valid' )[0]
 
         else:
 
             # for each neuron
-            v = sum(data['n'][j-dh:j,:]*(theta['h']))
+            v = sum(data['n'][j-dh:j,:]*(h))
 
         # compute model firing rate
-        r = np.exp( u[j,:] + v + theta['b'] ) + epsilon
+        r = np.exp( u[j,:] + v + b ) + epsilon
 
         # draw spikes
         data['n'][j,:] = poisson.rvs(r)
 
     return data
-
 
 def simulate(theta, params, data):
 
@@ -205,10 +211,17 @@ def simulate(theta, params, data):
     """
 
     ## get out parameters
+
+    # constants
     ds = params['stim_dim']
     dh = params['hist_dim']
     N  = params['numNeurons']
     M = data['x'].shape[0]
+
+    # model parameters
+    w = theta['w']
+    b = theta['b']
+    h = theta['h']
 
     # get stimuli, offset, and spike counts
     x = data['x']           # (x is: m by ds)
@@ -219,29 +232,25 @@ def simulate(theta, params, data):
         print('Error: minibatch size is too small (smaller than history term)')
 
     # compute stimulus projection for the n neurons     # (u is: M by N)
-    u = theta['w'].T.dot(x.T).T
+    u = w.T.dot(x.T).T
 
     # predicted rates
     rates = np.zeros( (M,N) )
 
     # compute history terms                             # (uh is: M by N)
     for nrnIdx in range(N):
-        v = np.reshape( np.correlate(np.squeeze(n[:,nrnIdx]), np.squeeze(theta['h'][:,nrnIdx]), 'full')[0:n.shape[0]-1], (M-1,1) )
+        v = np.reshape( np.correlate(np.squeeze(n[:,nrnIdx]), np.squeeze(h[:,nrnIdx]), 'full')[0:n.shape[0]-1], (M-1,1) )
         v = np.vstack(( np.zeros((1,1)) , v ))
 
-        #print('v: ', v.shape)
-        #print('u: ', u[:,nrnIdx].shape)
-        #print('b: ', theta['b'][0,nrnIdx].shape)
-
         # response of the n neurons (stored as an n by m matrix)
-        rates[:,nrnIdx] = np.exp( u[:,nrnIdx] + np.squeeze(v) + theta['b'][0,nrnIdx] )
+        rates[:,nrnIdx] = np.exp( u[:,nrnIdx] + np.squeeze(v) + b[0,nrnIdx] )
 
     return rates
 
 if __name__=="__main__":
 
     print('Initializing parameters...')
-    p = setParameters(m = 1e4)
+    p = setParameters(n = 2, ds = 50, dh = 10, m = 1e4)
 
     print('Generating model...')
     theta = generateModel(p)
