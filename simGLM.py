@@ -16,8 +16,8 @@ def f_df(theta, data, params):
     % for the generalized linear model (GLM)
     """
 
-    # fudge factor for numerical stability
-    epsilon = 0
+    # offset for numerical stability
+    epsilon = 1e-20
 
     # number of data samples in this batch
     m = data['x'].shape[0]
@@ -68,7 +68,7 @@ def f_df(theta, data, params):
     return fval, grad
 
 
-def setParameters(ds = 500, dh = 10, m = 1000, dt = 0.1):
+def setParameters(n = 1, ds = 500, dh = 10, m = 1000, dt = 0.1):
 
     """
     !! NOTE: Currently, n must be set to 1
@@ -86,7 +86,7 @@ def setParameters(ds = 500, dh = 10, m = 1000, dt = 0.1):
     params = {'n': 1, 'ds': ds, 'dh': dh, 'm': m, 'dt': dt}
     return params
 
-def generateModel(params):
+def generateModel(params, filterType='sinusoid'):
 
     """
 
@@ -104,8 +104,20 @@ def generateModel(params):
     theta = {}
 
     ## build the filters:
+
     # stimulus filters for each of n neurons
-    theta['w'] = 0.2*np.random.randn(params['ds'], params['n'])
+    if filterType is 'random':
+        theta['w'] = np.random.randn(params['ds'], params['n'])
+    elif filterType is 'sinusoid':
+        theta['w'] = np.zeros((params['ds'], params['n']))
+        for neuronIndex in range(params['n']):
+            theta['w'][:,neuronIndex] = np.sin( np.linspace(0,2*np.pi,params['ds']) + 2*np.pi*np.random.rand() )
+    else:
+        print('WARNING: unrecognized filter type. Using random values instead.')
+        theta['w'] = 0.2*np.random.randn(params['ds'], params['n'])
+
+    # normalize filters
+    theta['w'] = theta['w'] / np.linalg.norm( theta['w'], axis=0 )
 
     # offset (scalar)
     theta['b'] = -1*np.ones((1,params['n']))
@@ -133,6 +145,9 @@ def generateData(theta, params):
     Generates stimuli and draws spike counts from the model
     -------------------------------------------------------
     """
+
+    # offset for numerical stability
+    epsilon = 1e-20
 
     ## store output in a dictionary
     data = {}
@@ -167,7 +182,7 @@ def generateData(theta, params):
             v = data['n'][j-params['dh']:j].T.dot(theta['h'])
 
         # compute model firing rate
-        r = np.exp( u[j] + v + theta['b'] )
+        r = np.exp( u[j] + v + theta['b'] ) + epsilon
 
         # draw spikes
         data['n'][j] = poisson.rvs(r)
