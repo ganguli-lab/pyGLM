@@ -67,7 +67,7 @@ def f_df(theta, data, params):
 
     return fval, grad
 
-def setParameters(n = 20, ds = 500, dh = 10, m = 1000, dt = 0.1):
+def setParameters(n = 10, ds = 1024, dh = 50, m = 1000, dt = 0.1):
 
     """
     Parameters
@@ -123,11 +123,12 @@ def generateModel(params, filterType='gabor'):
         for nrnIdx in range(N):
 
             # random parameters
-            mySigma = np.random.rand()*5 + 0.1
-            myFreq  = np.random.rand()*10
+            mySigma = np.random.rand()*0.6 + 0.1
+            myFreq  = np.random.rand()*5
+            myPhase = np.random.rand()*2*np.pi
 
             # build filter
-            theta['w'][:,nrnIdx] = gabor.buildGabor(ds, sigma=mySigma, freq=myFreq)
+            theta['w'][:,nrnIdx] = gabor.buildGabor(ds, sigma=mySigma, freq=myFreq, phase=myPhase)
 
     else:
         print('WARNING: unrecognized filter type. Using random values instead.')
@@ -265,10 +266,22 @@ def simulate(theta, params, data):
 
     return rates
 
+def visualizeNetwork(theta, params, data):
+
+    print('====================================\n')
+    print('===== Simulated GLM Properties =====\n')
+
+
+    print('Spike Counts:\n')
+    print('\tmean: ', np.mean(data['n']))
+    print('\tvar.: ', np.std(data['n']))
+
+    print('====================================\n')
+
 if __name__=="__main__":
 
     print('Initializing parameters...')
-    p = setParameters(n = 2, ds = 50, dh = 10, m = 1e4)
+    p = setParameters(n = 10, ds = 1024, dh = 20, m = 1e2)
 
     print('Generating model...')
     theta = generateModel(p, 'gabor')

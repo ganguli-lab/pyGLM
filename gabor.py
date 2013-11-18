@@ -8,24 +8,24 @@ author: Niru Maheswaranathan
 """
 
 # builds a 2D Gabor
-def buildGabor(dim, sigma = 0.3, freq = 6):
+def buildGabor(dim, sigma = 0.3, freq = 6, phase = 0):
 
     # create a range from -1 to 1 with the right number of points
-    x = np.linspace(-1, -1, np.ceil(np.sqrt(dim)))
+    x = np.linspace(-1, 1, np.ceil(np.sqrt(dim)))
 
     # create a normal distribution
     y = (1/np.sqrt(2*np.pi*sigma))*np.exp(-.5*((x/sigma)**2))
     y = y/max(y)                      # normalize
 
     # get the outer product of y and y' (2D gaussian)
-    filt = np.multiply.outer(np.transpose(y),y)
+    filt = np.multiply.outer(y.T,y)
 
     # create sinusoid
-    y2 = np.sin(x*np.pi*freq)
+    y2 = np.sin(x*np.pi*freq + phase)
 
     # create grating
     y3  = np.ones(np.size(y2))
-    img = np.multiply.outer(np.transpose(y3),y2)
+    img = np.multiply.outer(y3.T,y2)
 
     # mask gabor
     gabor = img*filt
