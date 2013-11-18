@@ -80,7 +80,7 @@ def setParameters(n = 10, ds = 1024, dh = 50, m = 1000, dt = 0.1):
     """
 
     # define the parameters dictionary
-    params = {'numNeurons': n, 'stim_dim': ds, 'hist_dim': dh, 'numSamples': m, 'dt': dt}
+    params = {'numNeurons': n, 'stim_dim': ds, 'hist_dim': dh, 'numSamples': m, 'dt': dt, 'alpha': 0.1}
     return params
 
 def generateModel(params, filterType='gabor'):
@@ -145,8 +145,12 @@ def generateModel(params, filterType='gabor'):
     theta['h'] = -0.1*np.sort( np.random.rand( dh, N ), axis=0 )
 
     # coupling filters - stored as a (n by n) matrix
-    theta['k'] = np.random.rand(N, N)
+    theta['k'] = np.random.randn(N, N)
     theta['k'] = (theta['k'] - theta['k'].T)/2
+
+    # enforce sparse coupling (zero out most connections)
+    temp = np.random.rand(N,N)
+    theta['k'][temp >= alpha] = 0
 
     return theta
 
