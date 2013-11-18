@@ -1,5 +1,5 @@
 import numpy as np
-import gabor
+import pyGLM.gabor as gabor
 from scipy.stats import poisson
 
 """
@@ -134,23 +134,38 @@ def generateModel(params, filterType='gabor'):
         print('WARNING: unrecognized filter type. Using random values instead.')
         theta['w'] = 0.2*np.random.randn(ds, N)
 
+    # pick out two pools
+    fracInh = 0.2
+    numInh = np.ceil( fracInh * N )
+    numExc = N - numInh
+
     # normalize filters
     #theta['w'] = theta['w'] / np.linalg.norm( theta['w'], axis=0 )
     theta['w'] = theta['w'] / np.sqrt(np.sum(theta['w']**2, axis=0))
 
     # offset (scalar)
-    theta['b'] = -1*np.ones((1,N)) + 0.25*np.random.randn(1,N)
+    #theta['b'] = -1*np.ones((1,N)) + 0.25*np.random.randn(1,N)
+    theta['b'] = np.zeros((1,N))
+
+    theta['b'][0,:numInh] = -0.5*np.ones((1,numInh))
+    theta['b'][0,numInh:] = -3 + 2*np.random.rand(1,numExc)
 
     # history (self-coupling) filters for each of n neurons
-    theta['h'] = -0.3*np.sort( np.random.rand( dh, N ), axis=0 )
+    theta['h'] = np.zeros( (dh,N) )
+    theta['h'][:,:numInh] = -0.2*np.sort( np.random.rand( dh, numInh ), axis=0 )
+    theta['h'][:,numInh:] = -2*np.sort( np.random.rand( dh, numExc ), axis=0 )
+
+    # inhibitory connections
+    inhK = -4*np.random.rand(N, numInh) / numInh
+
+    # excitatory (sparse) connections
+    excK =  7*np.random.rand(N, numExc) / (numExc * params['alpha'])
+    temp =    np.random.rand(N, numExc)
+    excK[temp >= params['alpha']] = 0
 
     # coupling filters - stored as a (n by n) matrix
-    theta['k'] = np.random.randn(N, N) / (N**2)
-    theta['k'] = (theta['k'] - theta['k'].T)/2
-
-    # enforce sparse coupling (zero out most connections)
-    temp = np.random.rand(N,N)
-    theta['k'][temp >= params['alpha']] = 0
+    theta['k'] = np.hstack(( inhK, excK )).T
+    theta['k'] -= np.diag(np.diag(theta['k']))
 
     return theta
 
@@ -181,18 +196,24 @@ def generateData(theta, params):
     ## store output in a dictionary
     data = {}
 
-    # input / output
-    data['x'] = 0.2*np.random.randn(M, ds) # stimulus
+    # output
     data['n'] = np.zeros( (M, N) )                   # spike history
+    data['r'] = np.zeros( (M, N) )                   # spike history
+
+    # generate stimuli
+    #data['x'] = 0.2*np.random.randn(M, ds)         # Gaussian white noise
+    data['x'] = genPinkNoise(M, np.sqrt(ds), params['dt']).reshape( (M, ds) )
 
     # compute stimulus projection
     u = w.T.dot(data['x'].T).T            # (u is: M by N)
 
     # the initial rate (no history)
     data['n'][0,:] = poisson.rvs( np.exp( u[0,:] + b ) )
+    data['r'][0,:] = np.exp( u[0,:] + b )
 
     # the next rate (one history point)
     data['n'][1,:] = poisson.rvs( np.exp( u[1,:] + data['n'][0,:]*h[-1,:] + b ) )
+    data['r'][1,:] = np.exp( u[1,:] + data['n'][0,:]*h[-1,:] + b )
 
     # simulate the model (in time)
     for j in np.arange(2,M):
@@ -214,11 +235,22 @@ def generateData(theta, params):
             # for each neuron
             v = sum(data['n'][j-dh:j,:]*(h))
 
+        # print out contributions
+        print('stim: %g\thistory: %g\tcoupling: %g\tbias: %g'%(np.linalg.norm(u[j,:]), np.linalg.norm(v), np.linalg.norm(data['n'][j-1,:].dot(k)), np.linalg.norm(b)))
+
         # compute model firing rate
         r = np.exp( u[j,:] + v + b + data['n'][j-1,:].dot(k) ) + epsilon
+        data['r'][j,:] = r.copy()
+
+        # cap spike count
+        maxVal = 10
+        r[r > maxVal] = maxVal
 
         # draw spikes
-        data['n'][j,:] = poisson.rvs(r)
+        spikes = poisson.rvs(r)
+
+        # store
+        data['n'][j,:] = spikes
 
     return data
 
@@ -272,20 +304,42 @@ def simulate(theta, params, data):
 
 def visualizeNetwork(theta, params, data):
 
-    print('====================================\n')
-    print('===== Simulated GLM Properties =====\n')
+    print('\n====================================')
+    print('===== Simulated GLM Properties =====')
 
+    print('\nSpike Counts:')
+    print('mean: ', np.mean(data['n']))
+    print('var.: ', np.std(data['n']))
 
-    print('Spike Counts:\n')
-    print('\tmean: ', np.mean(data['n']))
-    print('\tvar.: ', np.std(data['n']))
+    print('\n====================================\n')
 
-    print('====================================\n')
+def genPinkNoise(t, n, dt):
+
+    noise = np.random.randn(t,n,n)
+
+    tc = np.arange(t).reshape(( -1,1,1 )) * dt
+    xc = np.arange(n).reshape(( 1,-1,1 ))
+    yc = np.arange(n).reshape(( 1,1,-1 ))
+
+    tc -= np.mean(tc)
+    xc -= np.mean(xc)
+    yc -= np.mean(yc)
+
+    radii = np.sqrt( tc**2 + xc**2 + yc**2 )
+
+    # normalize
+    noise /= np.fft.fftshift(radii)
+
+    # generate via ifft
+    stim = np.real(np.fft.ifftn(noise))
+    stim /= np.sqrt(np.mean(stim**2))
+
+    return stim
 
 if __name__=="__main__":
 
     print('Initializing parameters...')
-    p = setParameters(n = 50, ds = 256, dh = 10, m = 1e4)
+    p = setParameters(n = 100, ds = 256, dh = 10, m = 1e4)
 
     print('Generating model...')
     theta = generateModel(p, 'gabor')
@@ -293,6 +347,28 @@ if __name__=="__main__":
     print('Simulating model...')
     data = generateData(theta, p)
     visualizeNetwork(theta, p, data)
+
+    from matplotlib.pylab import *
+
+    # plot connections
+    figure(7)
+    clf()
+    imshow(theta['k'])
+    colorbar()
+    draw()
+
+    # plot rasters
+    figure(6)
+    clf()
+    imshow(np.log(1 + data['n'].T))
+    colorbar()
+    draw()
+
+    figure(8)
+    clf()
+    imshow(np.log(data['r'].T))
+    colorbar()
+    draw()
 
     print('Evaluating objective...')
     fval, grad = f_df(theta, data, p)
