@@ -150,7 +150,7 @@ def generateModel(params, filterType='gabor'):
 
     # enforce sparse coupling (zero out most connections)
     temp = np.random.rand(N,N)
-    theta['k'][temp >= alpha] = 0
+    theta['k'][temp >= params['alpha']] = 0
 
     return theta
 
