@@ -20,7 +20,7 @@ radii = np.sqrt( tc**2 + xc**2 + yc**2 )
 # normalize
 noise /= np.fft.fftshift(radii)
 
-stim = np.fft.ifftn(noise)
+stim = np.real(np.fft.ifftn(noise))
 
 #def one_over_f(f, knee, alpha):
     #desc = np.ones_like(f)
