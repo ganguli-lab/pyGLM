@@ -145,7 +145,7 @@ def generateModel(params, filterType='gabor'):
     theta['h'] = -0.3*np.sort( np.random.rand( dh, N ), axis=0 )
 
     # coupling filters - stored as a (n by n) matrix
-    theta['k'] = np.random.randn(N, N)
+    theta['k'] = np.random.randn(N, N) / (N**2)
     theta['k'] = (theta['k'] - theta['k'].T)/2
 
     # enforce sparse coupling (zero out most connections)
@@ -285,13 +285,14 @@ def visualizeNetwork(theta, params, data):
 if __name__=="__main__":
 
     print('Initializing parameters...')
-    p = setParameters(n = 5, ds = 1024, dh = 20, m = 1e3)
+    p = setParameters(n = 50, ds = 256, dh = 10, m = 1e4)
 
     print('Generating model...')
     theta = generateModel(p, 'gabor')
 
     print('Simulating model...')
     data = generateData(theta, p)
+    visualizeNetwork(theta, p, data)
 
     print('Evaluating objective...')
     fval, grad = f_df(theta, data, p)
