@@ -1,4 +1,5 @@
 import numpy as np
+import gabor
 from scipy.stats import poisson
 
 """
@@ -82,7 +83,7 @@ def setParameters(n = 20, ds = 500, dh = 10, m = 1000, dt = 0.1):
     params = {'numNeurons': n, 'stim_dim': ds, 'hist_dim': dh, 'numSamples': m, 'dt': dt}
     return params
 
-def generateModel(params, filterType='sinusoid'):
+def generateModel(params, filterType='gabor'):
 
     """
 
@@ -111,10 +112,23 @@ def generateModel(params, filterType='sinusoid'):
     # stimulus filters for each of n neurons
     if filterType is 'random':
         theta['w'] = np.random.randn(ds, N)
+
     elif filterType is 'sinusoid':
         theta['w'] = np.zeros((ds, N))
         for nrnIdx in range(N):
             theta['w'][:,nrnIdx] = np.sin( np.linspace(0,2*np.pi,ds) + 2*np.pi*np.random.rand() )
+
+    elif filterType is 'gabor':
+        theta['w'] = np.zeros((ds, N))
+        for nrnIdx in range(N):
+
+            # random parameters
+            mySigma = np.random.rand()*5 + 0.1
+            myFreq  = np.random.rand()*10
+
+            # build filter
+            theta['w'][:,nrnIdx] = gabor.buildGabor(ds, sigma=mySigma, freq=myFreq)
+
     else:
         print('WARNING: unrecognized filter type. Using random values instead.')
         theta['w'] = 0.2*np.random.randn(ds, N)
@@ -257,7 +271,7 @@ if __name__=="__main__":
     p = setParameters(n = 2, ds = 50, dh = 10, m = 1e4)
 
     print('Generating model...')
-    theta = generateModel(p)
+    theta = generateModel(p, 'gabor')
 
     print('Simulating model...')
     data = generateData(theta, p)

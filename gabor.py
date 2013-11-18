@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import scipy
 
 """
 builds Gabor filters
@@ -9,9 +8,10 @@ author: Niru Maheswaranathan
 """
 
 # builds a 2D Gabor
-def buildGabor(sigma = 0.3, freq = 6):
+def buildGabor(dim, sigma = 0.3, freq = 6):
 
-    x = scipy.r_[-1:1:.01]   #create a range from -1 to 1 stepped by .01
+    # create a range from -1 to 1 with the right number of points
+    x = np.linspace(-1, -1, np.ceil(np.sqrt(dim)))
 
     # create a normal distribution
     y = (1/np.sqrt(2*np.pi*sigma))*np.exp(-.5*((x/sigma)**2))
@@ -27,14 +27,13 @@ def buildGabor(sigma = 0.3, freq = 6):
     y3  = np.ones(np.size(y2))
     img = np.multiply.outer(np.transpose(y3),y2)
 
-    # return gabor
+    # mask gabor
     gabor = img*filt
-    return gabor
+
+    # return object with the right # of dimensions
+    return gabor.flatten()[:dim]
 
 if __name__=="__main__":
 
     print('hello')
-    
-    G = buildGabor()
-    plt.imshow(G)
-    plt.show()
+    gabor = buildGabor(256)
