@@ -139,10 +139,10 @@ def generateModel(params, filterType='gabor'):
     theta['w'] = theta['w'] / np.sqrt(np.sum(theta['w']**2, axis=0))
 
     # offset (scalar)
-    theta['b'] = -1*np.ones((1,N)) + 0.1*np.random.randn(1,N)
+    theta['b'] = -1*np.ones((1,N)) + 0.25*np.random.randn(1,N)
 
     # history (self-coupling) filters for each of n neurons
-    theta['h'] = -0.1*np.sort( np.random.rand( dh, N ), axis=0 )
+    theta['h'] = -0.3*np.sort( np.random.rand( dh, N ), axis=0 )
 
     # coupling filters - stored as a (n by n) matrix
     theta['k'] = np.random.randn(N, N)
@@ -285,7 +285,7 @@ def visualizeNetwork(theta, params, data):
 if __name__=="__main__":
 
     print('Initializing parameters...')
-    p = setParameters(n = 10, ds = 1024, dh = 20, m = 1e2)
+    p = setParameters(n = 5, ds = 1024, dh = 20, m = 1e3)
 
     print('Generating model...')
     theta = generateModel(p, 'gabor')
