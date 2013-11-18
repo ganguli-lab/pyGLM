@@ -1,5 +1,6 @@
 import numpy as np
-import matplotlib.pyplot as plt
+from matplotlib.pyplot import *
+import time
 
 n = 100
 t = 500
@@ -21,6 +22,16 @@ radii = np.sqrt( tc**2 + xc**2 + yc**2 )
 noise /= np.fft.fftshift(radii)
 
 stim = np.real(np.fft.ifftn(noise))
+
+stim /= np.sqrt(np.mean(stim**2))
+
+figure(1)
+for i in range(t):
+    clf()
+    imshow(np.real(stim[i,:,:]), cmap = cm.Greys_r, vmin = -2, vmax = 2)
+    draw()
+    time.sleep(0.01)
+    print i
 
 #def one_over_f(f, knee, alpha):
     #desc = np.ones_like(f)
