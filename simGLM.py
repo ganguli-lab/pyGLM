@@ -148,7 +148,7 @@ def generateModel(params, filterType='gabor'):
     theta['b'] = np.zeros((1,N))
 
     theta['b'][0,:numInh] = -0.5*np.ones((1,numInh))
-    theta['b'][0,numInh:] = -3 + 2*np.random.rand(1,numExc)
+    theta['b'][0,numInh:] = -4 + 2*np.random.rand(1,numExc)
 
     # history (self-coupling) filters for each of n neurons
     theta['h'] = np.zeros( (dh,N) )
@@ -236,7 +236,7 @@ def generateData(theta, params):
             v = sum(data['n'][j-dh:j,:]*(h))
 
         # print out contributions
-        print('stim: %g\thistory: %g\tcoupling: %g\tbias: %g'%(np.linalg.norm(u[j,:]), np.linalg.norm(v), np.linalg.norm(data['n'][j-1,:].dot(k)), np.linalg.norm(b)))
+        #print('stim: %g\thistory: %g\tcoupling: %g\tbias: %g'%(np.linalg.norm(u[j,:]), np.linalg.norm(v), np.linalg.norm(data['n'][j-1,:].dot(k)), np.linalg.norm(b)))
 
         # compute model firing rate
         r = np.exp( u[j,:] + v + b + data['n'][j-1,:].dot(k) ) + epsilon
@@ -370,5 +370,13 @@ if __name__=="__main__":
     colorbar()
     draw()
 
+    show()
+
     print('Evaluating objective...')
     fval, grad = f_df(theta, data, p)
+
+    print('Objective: %g'%(fval))
+
+    for key in grad.keys():
+        print('grad[' + key + ']: %g'%(np.linalg.norm(grad[key])))
+        #print('stim: %g\thistory: %g\tcoupling: %g\tbias: %g'%(np.linalg.norm(u[j,:]), np.linalg.norm(v), np.linalg.norm(data['n'][j-1,:].dot(k)), np.linalg.norm(b)))
