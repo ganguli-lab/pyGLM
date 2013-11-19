@@ -27,23 +27,24 @@ def f_df(theta, data, params):
     epsilon = 1e-20
 
     ## simulate the model at theta
-    rhat = simulate(theta, params, data)
+    rhat, expu = simulate(theta, params, data)
     rdt  = rhat*params['dt']                        # rdt is: M by N
 
     ## compute objective value (negative log-likelihood)
-    fval = sum(sum(rdt - data['n']*np.log(rdt + epsilon))) / M
+    fval = np.sum(rdt - data['n']*np.log(rdt + epsilon)) / M
 
     ## compute gradient
     grad = dict()
 
     # temporarily store different in rate vs. observed spike count (used for gradient computations)
-    rateDiff = (rdt - data['n']).T                  # rateDiff is: N by M
+    #rateDiff = (rdt - data['n']).T                  # rateDiff is: N by M  (used for exponential nonlinearity)
+    rateDiff = ((params['dt'] - data['n']/rhat)*expu).T                  # rateDiff is: N by M  (used for soft linear rectifying nonlinearity)
 
     # gradient for stimulus parameters
     grad['w'] = rateDiff.dot(data['x']).T / M       # grad['w'] is: ds by N
 
     # gradient for the offset term
-    grad['b'] = sum(rateDiff.T) / M                 # grad['b'] is:  1 by N
+    grad['b'] = np.sum(rateDiff.T, axis=0) / M                 # grad['b'] is:  1 by N
 
     # gradient for history terms
     grad['h'] = np.zeros((dh,N))                    # grad['h'] is: dh by N
@@ -63,7 +64,7 @@ def f_df(theta, data, params):
         for delta in np.arange(1,dh+1):
 
             # average product of spike counts and rateDiff at each point in time
-            grad['h'][dh-delta,nrnIdx] = sum( spkCountArray[:-delta] * rateDiffArray[delta:] ) / M
+            grad['h'][dh-delta,nrnIdx] = np.sum( spkCountArray[:-delta] * rateDiffArray[delta:] , axis=0) / M
 
     return fval, grad
 
@@ -81,6 +82,11 @@ def setParameters(n = 10, ds = 1024, dh = 50, m = 1000, dt = 0.1):
 
     # define the parameters dictionary
     params = {'numNeurons': n, 'stim_dim': ds, 'hist_dim': dh, 'numSamples': m, 'dt': dt, 'alpha': 0.1}
+
+    # nonlinearity
+    params['f'] = logexp # (soft-linear-rectifying)
+    #params['f'] = np.exp # exponential
+
     return params
 
 def generateModel(params, filterType='gabor'):
@@ -141,25 +147,32 @@ def generateModel(params, filterType='gabor'):
 
     # normalize filters
     #theta['w'] = theta['w'] / np.linalg.norm( theta['w'], axis=0 )
-    theta['w'] = theta['w'] / np.sqrt(np.sum(theta['w']**2, axis=0))
+    theta['w'] = 1.5*theta['w'] / np.sqrt(np.sum(theta['w']**2, axis=0))
 
     # offset (scalar)
     #theta['b'] = -1*np.ones((1,N)) + 0.25*np.random.randn(1,N)
     theta['b'] = np.zeros((1,N))
 
-    theta['b'][0,:numInh] = -0.5*np.ones((1,numInh))
-    theta['b'][0,numInh:] = -4 + 2*np.random.rand(1,numExc)
+    theta['b'][0,:numInh] = 0.15*np.ones((1,numInh))
+    theta['b'][0,numInh:] = -5 + 3*np.random.rand(1,numExc)
 
     # history (self-coupling) filters for each of n neurons
     theta['h'] = np.zeros( (dh,N) )
-    theta['h'][:,:numInh] = -0.2*np.sort( np.random.rand( dh, numInh ), axis=0 )
-    theta['h'][:,numInh:] = -2*np.sort( np.random.rand( dh, numExc ), axis=0 )
+
+    # random decay (linear)
+    #theta['h'][:,:numInh] = -0.2*np.sort( np.random.rand( dh, numInh ), axis=0 )
+    #theta['h'][:,numInh:] = -0.5*np.sort( np.random.rand( dh, numExc ), axis=0 )
+
+    # exponential decay
+    tau = np.linspace(1,0,dh).reshape( (dh,1) )
+    theta['h'][:,:numInh] = -0.2*np.exp(-10*tau.dot( np.ones( (1, numInh) )))
+    theta['h'][:,numInh:] = -0.5*np.exp(-5*tau.dot(  np.ones( (1, numExc) )))
 
     # inhibitory connections
-    inhK = -10*np.random.rand(N, numInh) / numInh
+    inhK = -5.5*np.random.rand(N, numInh) / numInh
 
     # excitatory (sparse) connections
-    excK =  7*np.random.rand(N, numExc) / (numExc * params['alpha'])
+    excK = 10*np.random.rand(N, numExc) / (numExc * params['alpha'])
     temp =    np.random.rand(N, numExc)
     excK[temp >= params['alpha']] = 0
 
@@ -168,6 +181,9 @@ def generateModel(params, filterType='gabor'):
     theta['k'] -= np.diag(np.diag(theta['k']))
 
     return theta
+
+def logexp(u):
+    return np.log( 1 + np.exp( u ))
 
 def generateData(theta, params):
 
@@ -183,6 +199,9 @@ def generateData(theta, params):
     dh = params['hist_dim']
     N  = params['numNeurons']
     M  = params['numSamples']
+
+    # nonlinearity
+    f = params['f']
 
     # model parameters
     w = theta['w']
@@ -208,12 +227,12 @@ def generateData(theta, params):
     u = w.T.dot(data['x'].T).T            # (u is: M by N)
 
     # the initial rate (no history)
-    data['n'][0,:] = poisson.rvs( np.exp( u[0,:] + b ) )
-    data['r'][0,:] = np.exp( u[0,:] + b )
+    data['n'][0,:] = poisson.rvs( f( u[0,:] + b ) )
+    data['r'][0,:] = f( u[0,:] + b )
 
     # the next rate (one history point)
-    data['n'][1,:] = poisson.rvs( np.exp( u[1,:] + data['n'][0,:]*h[-1,:] + b ) )
-    data['r'][1,:] = np.exp( u[1,:] + data['n'][0,:]*h[-1,:] + b )
+    data['n'][1,:] = poisson.rvs( f( u[1,:] + data['n'][0,:]*h[-1,:] + b ) )
+    data['r'][1,:] = f( u[1,:] + data['n'][0,:]*h[-1,:] + b )
 
     # simulate the model (in time)
     for j in np.arange(2,M):
@@ -223,23 +242,22 @@ def generateData(theta, params):
 
         # compute history weights
         if j < dh+1:
-
+            v = np.sum( data['n'][:j,:]*h[-j:] , axis=0)
             # for each neuron
-            for nrnIdx in range(N):
-                n1 = np.squeeze(data['n'][0:j,nrnIdx])
-                n2 = np.squeeze(h[:,nrnIdx])
-                v[0,nrnIdx] = np.correlate( n1 , n2 , 'valid' )[0]
+            #for nrnIdx in range(N):
+                #n1 = np.squeeze(data['n'][0:j,nrnIdx])
+                #n2 = np.squeeze(h[:,nrnIdx])
+                #v[0,nrnIdx] = np.correlate( n1 , n2 , 'valid' )[0]
 
         else:
-
             # for each neuron
-            v = sum(data['n'][j-dh:j,:]*(h))
+            v = np.sum(data['n'][j-dh:j,:]*(h), axis=0)
 
         # print out contributions
         #print('stim: %g\thistory: %g\tcoupling: %g\tbias: %g'%(np.linalg.norm(u[j,:]), np.linalg.norm(v), np.linalg.norm(data['n'][j-1,:].dot(k)), np.linalg.norm(b)))
 
         # compute model firing rate
-        r = np.exp( u[j,:] + v + b + data['n'][j-1,:].dot(k) ) + epsilon
+        r = f( u[j,:] + v + b + data['n'][j-1,:].dot(k) ) + epsilon
         data['r'][j,:] = r.copy()
 
         # cap spike count
@@ -269,6 +287,9 @@ def simulate(theta, params, data):
     N  = params['numNeurons']
     M = data['x'].shape[0]
 
+    # nonlinearity
+    f = params['f']
+
     # model parameters
     w = theta['w']
     b = theta['b']
@@ -291,16 +312,23 @@ def simulate(theta, params, data):
 
     # predicted rates
     rates = np.zeros( (M,N) )
+    expu  = np.zeros( (M,N) )
 
     # compute history terms                             # (uh is: M by N)
     for nrnIdx in range(N):
         v = np.reshape( np.correlate(np.squeeze(n[:,nrnIdx]), np.squeeze(h[:,nrnIdx]), 'full')[0:n.shape[0]-1], (M-1,1) )
         v = np.vstack(( np.zeros((1,1)) , v ))
 
-        # response of the n neurons (stored as an n by m matrix)
-        rates[:,nrnIdx] = np.exp( u[:,nrnIdx] + np.squeeze(v) + b[0,nrnIdx] + kappa[:,nrnIdx])
+        # input to the nonlinearity
+        linearOutput = u[:,nrnIdx] + np.squeeze(v) + b[0,nrnIdx] + kappa[:,nrnIdx]
 
-    return rates
+        # store exp(linearOtput) for the gradient
+        expu[:,nrnIdx]  = np.exp(linearOutput) / ( 1 + np.exp(linearOutput) )
+
+        # response of the n neurons (stored as an n by m matrix)
+        rates[:,nrnIdx] = f( linearOutput )
+
+    return rates, expu
 
 def visualizeNetwork(theta, params, data):
 
@@ -309,7 +337,12 @@ def visualizeNetwork(theta, params, data):
 
     print('\nSpike Counts:')
     print('mean: ', np.mean(data['n']))
-    print('var.: ', np.std(data['n']))
+    print('var.: ', np.var(data['n']))
+
+    print('\nRates:')
+    print('mean: ', np.mean(data['r']))
+    print('var.: ', np.var(data['r']))
+    print('*** %g percent of rates are over the limit. ***'%(100*np.mean(data['r']>10)))
 
     print('\n====================================\n')
 
@@ -379,5 +412,3 @@ if __name__=="__main__":
 
     for key in grad.keys():
         print('grad[' + key + ']: %g'%(np.linalg.norm(grad[key])))
-
-    print('*** %g percent of rates are over the limit. ***'%(100*mean(data['r']>10)))
