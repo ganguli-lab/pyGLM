@@ -156,7 +156,7 @@ def generateModel(params, filterType='gabor'):
     theta['h'][:,numInh:] = -2*np.sort( np.random.rand( dh, numExc ), axis=0 )
 
     # inhibitory connections
-    inhK = -4*np.random.rand(N, numInh) / numInh
+    inhK = -10*np.random.rand(N, numInh) / numInh
 
     # excitatory (sparse) connections
     excK =  7*np.random.rand(N, numExc) / (numExc * params['alpha'])
@@ -379,4 +379,5 @@ if __name__=="__main__":
 
     for key in grad.keys():
         print('grad[' + key + ']: %g'%(np.linalg.norm(grad[key])))
-        #print('stim: %g\thistory: %g\tcoupling: %g\tbias: %g'%(np.linalg.norm(u[j,:]), np.linalg.norm(v), np.linalg.norm(data['n'][j-1,:].dot(k)), np.linalg.norm(b)))
+
+    print('*** %g percent of rates are over the limit. ***'%(100*mean(data['r']>10)))
