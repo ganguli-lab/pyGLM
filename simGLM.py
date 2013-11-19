@@ -66,6 +66,9 @@ def f_df(theta, data, params):
             # average product of spike counts and rateDiff at each point in time
             grad['h'][dh-delta,nrnIdx] = np.sum( spkCountArray[:-delta] * rateDiffArray[delta:] , axis=0) / M
 
+    # check for nans
+    gradCheck(grad)
+
     return fval, grad
 
 def setParameters(n = 10, ds = 1024, dh = 50, m = 1000, dt = 0.1):
@@ -321,12 +324,15 @@ def simulate(theta, params, data):
 
         # input to the nonlinearity
         linearOutput = u[:,nrnIdx] + np.squeeze(v) + b[0,nrnIdx] + kappa[:,nrnIdx]
+        arrayCheck(linearOutput, 'linear output')
 
         # store exp(linearOtput) for the gradient
         expu[:,nrnIdx]  = np.exp(linearOutput) / ( 1 + np.exp(linearOutput) )
+        arrayCheck(expu[:,nrnIdx], 'exp(u) / (1 + exp(u)) for neuron %g'%(nrnIdx))
 
         # response of the n neurons (stored as an n by m matrix)
         rates[:,nrnIdx] = f( linearOutput )
+        arrayCheck(rates[:,nrnIdx], 'rhat for neuron %g'%(nrnIdx))
 
     return rates, expu
 
@@ -368,6 +374,17 @@ def genPinkNoise(t, n, dt):
     stim /= np.sqrt(np.mean(stim**2))
 
     return stim
+
+def gradCheck(grad):
+    for key in grad.keys():
+        arrayCheck(grad[key], key)
+
+def arrayCheck(arr, name):
+    if ~np.isfinite(arr).all():
+        print('**** WARNING: Found non-finite value in ' + name + ' (%g percent of the values were bad)'%(np.mean(np.isfinite(arr))))
+
+
+
 
 if __name__=="__main__":
 
