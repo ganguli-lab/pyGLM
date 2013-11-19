@@ -186,7 +186,12 @@ def generateModel(params, filterType='gabor'):
     return theta
 
 def logexp(u):
-    return np.log( 1 + np.exp( u ))
+    #for stability
+    epsilon = 1e-6
+
+    output = np.log( 1 + np.exp( u )) + epsilon
+    output[u > 50] = u[u > 50]
+    return output
 
 def generateData(theta, params):
 
@@ -328,6 +333,8 @@ def simulate(theta, params, data):
 
         # store exp(linearOtput) for the gradient
         expu[:,nrnIdx]  = np.exp(linearOutput) / ( 1 + np.exp(linearOutput) )
+        expu[linearOutput > 50, nrnIdx] = 1
+
         arrayCheck(expu[:,nrnIdx], 'exp(u) / (1 + exp(u)) for neuron %g'%(nrnIdx))
 
         # response of the n neurons (stored as an n by m matrix)
