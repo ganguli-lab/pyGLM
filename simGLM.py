@@ -1,6 +1,7 @@
 import numpy as np
 import pyGLM.gabor as gabor
 from scipy.stats import poisson
+from os.path import join
 
 """
 simulates a coupled GLM model
@@ -41,7 +42,8 @@ def f_df(theta, data, params):
     rateDiff = ((params['dt'] - data['n']/rhat)*expu).T                  # rateDiff is: N by M  (used for soft linear rectifying nonlinearity)
 
     # gradient for stimulus parameters
-    grad['w'] = rateDiff.dot(data['x']).T / M       # grad['w'] is: ds by N
+    #grad['w'] = rateDiff.dot(data['x']).T / M       # grad['w'] is: ds by N
+    grad['w'] = data['x'].dot(rateDiff) / M       # grad['w'] is: ds by N
 
     # gradient for the offset term
     grad['b'] = np.sum(rateDiff.T, axis=0) / M                 # grad['b'] is:  1 by N
@@ -193,6 +195,18 @@ def logexp(u):
     output[u > 50] = u[u > 50]
     return output
 
+def loadExternalData(stimFile, ratesFile, shapes, baseDir='.'):
+
+    data = dict()
+
+    # load stimuli
+    data['x'] = np.memmap(join(baseDir, stimFile), dtype='uint8', mode='r', shape=tuple(shapes['stimSlicedShape']))
+
+    # load rates
+    data['n'] = np.memmap(join(baseDir, ratesFile), dtype='uint8', mode='r', shape=tuple(shapes['rateShape']))[40:,7:9]
+
+    return data
+
 def generateData(theta, params):
 
     """
@@ -232,7 +246,8 @@ def generateData(theta, params):
     data['x'] = genPinkNoise(M, np.sqrt(ds), params['dt']).reshape( (M, ds) )
 
     # compute stimulus projection
-    u = w.T.dot(data['x'].T).T            # (u is: M by N)
+    #u = w.T.dot(data['x'].T).T            # (u is: M by N)
+    u = data['x'].dot(w)
 
     # the initial rate (no history)
     data['n'][0,:] = poisson.rvs( f( u[0,:] + b ) )
@@ -324,7 +339,7 @@ def simulate(theta, params, data):
 
     # compute history terms                             # (uh is: M by N)
     for nrnIdx in range(N):
-        v = np.reshape( np.correlate(np.squeeze(n[:,nrnIdx]), np.squeeze(h[:,nrnIdx]), 'full')[0:n.shape[0]-1], (M-1,1) )
+        v = np.reshape( np.correlate(n[:,nrnIdx], h[:,nrnIdx], 'full')[0:n.shape[0]-1], (M-1,1) )
         v = np.vstack(( np.zeros((1,1)) , v ))
 
         # input to the nonlinearity

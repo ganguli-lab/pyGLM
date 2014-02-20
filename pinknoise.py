@@ -25,13 +25,15 @@ stim = np.real(np.fft.ifftn(noise))
 
 stim /= np.sqrt(np.mean(stim**2))
 
-figure(1)
-for i in range(t):
-    clf()
-    imshow(np.real(stim[i,:,:]), cmap = cm.Greys_r, vmin = -2, vmax = 2)
-    draw()
-    time.sleep(0.01)
-    print i
+
+
+#figure(1)
+#for i in range(t):
+    #clf()
+    #imshow(np.real(stim[i,:,:]), cmap = cm.Greys_r, vmin = -2, vmax = 2)
+    #draw()
+    #time.sleep(0.01)
+    #print i
 
 #def one_over_f(f, knee, alpha):
     #desc = np.ones_like(f)
