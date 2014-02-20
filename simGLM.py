@@ -42,8 +42,7 @@ def f_df(theta, data, params):
     rateDiff = ((params['dt'] - data['n']/rhat)*expu).T                  # rateDiff is: N by M  (used for soft linear rectifying nonlinearity)
 
     # gradient for stimulus parameters
-    #grad['w'] = rateDiff.dot(data['x']).T / M       # grad['w'] is: ds by N
-    grad['w'] = data['x'].dot(rateDiff) / M       # grad['w'] is: ds by N
+    grad['w'] = rateDiff.dot(data['x']).T / M       # grad['w'] is: ds by N
 
     # gradient for the offset term
     grad['b'] = np.sum(rateDiff.T, axis=0) / M                 # grad['b'] is:  1 by N
@@ -203,7 +202,7 @@ def loadExternalData(stimFile, ratesFile, shapes, baseDir='.'):
     data['x'] = np.memmap(join(baseDir, stimFile), dtype='uint8', mode='r', shape=tuple(shapes['stimSlicedShape']))
 
     # load rates
-    data['n'] = np.memmap(join(baseDir, ratesFile), dtype='uint8', mode='r', shape=tuple(shapes['rateShape']))[40:,7:9]
+    data['n'] = np.memmap(join(baseDir, ratesFile), dtype='uint8', mode='r', shape=tuple(shapes['rateShape']))[40:,:]
 
     return data
 
@@ -328,7 +327,8 @@ def simulate(theta, params, data):
         print('Error: minibatch size is too small (smaller than history term)')
 
     # compute stimulus projection for the n neurons     # (u is: M by N)
-    u = w.T.dot(x.T).T
+    #u = w.T.dot(x.T).T
+    u = x.dot(w)
 
     # compute coupling projection
     kappa = np.vstack(( np.zeros((1,N)), n.dot(k)[1:,:] )) # (kappa is: M by N)
